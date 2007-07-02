@@ -50,7 +50,9 @@ typedef struct {
   apr_pool_t *pool;
 } ap_memcache_t;
 
-MEMCACHE_DECLARE_NONSTD(ap_memcache_t*) ap_memcache_client(apr_memcache_t **mc);
+MEMCACHE_DECLARE_NONSTD(apr_memcache_t*) ap_memcache_client(server_rec *s);
+
+APR_DECLARE_OPTIONAL_FN(apr_memcache_t*, ap_memcache_client, (server_rec *s));
 
 #endif
 
