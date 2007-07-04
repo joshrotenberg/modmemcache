@@ -40,7 +40,7 @@ BIN_LDFLAGS=" `${APR_CONFIG} --link-libtool` `${APU_CONFIG} --link-libtool` `${A
 AC_SUBST(BIN_LDFLAGS)
 
 dnl this should be a list to all of the makefiles you expect to be generated
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile example/Makefile])
 AC_OUTPUT
 
 dnl whatever you want here, or nothing

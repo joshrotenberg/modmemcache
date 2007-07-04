@@ -21,25 +21,15 @@ module AP_MODULE_DECLARE_DATA memcache_module;
 
 typedef struct memcache_cfg {
   apr_memcache_t *mc;
-  apr_array_header_t *servers;
+  apr_hash_t *servers;
 } memcache_cfg;
-
-typedef struct memcache_server {
-  const char *host;
-  apr_port_t port;
-  apr_uint32_t min;
-  apr_uint32_t max;
-  apr_uint32_t smax;
-  apr_uint32_t ttl;
-  struct memcache_server *next;
-} memcache_server;
 
 /* config create */
 static void *memcache_create_cfg(apr_pool_t *p, server_rec *s)
 {
   memcache_cfg *cfg = (memcache_cfg *) apr_pcalloc(p, sizeof(memcache_cfg));
 
-  cfg->servers = apr_array_make(p, 5, sizeof(apr_memcache_server_t));
+  cfg->servers = apr_hash_make(p);
   return cfg;
 }
 
@@ -57,40 +47,34 @@ static void *memcache_merge(apr_pool_t *pool, void *b, void *a)
 static int memcache_postconfig(apr_pool_t *pconf, apr_pool_t *plog,
                                apr_pool_t *ptemp, server_rec *s)
 {
-
-  server_rec *sp;
   memcache_cfg *cfg;
+  apr_status_t rv;
+  apr_memcache_server_t *ms;
+  apr_hash_index_t *hi; 
+  int i;
+  void *val;
 
-  for(sp = s; sp; sp = sp->next) {
-    apr_status_t rv;
-    apr_memcache_server_t *ms;
-    int i;
-
-    cfg = (memcache_cfg *)ap_get_module_config(sp->module_config, 
-                                               &memcache_module);
-
-    if(cfg->servers == NULL || !cfg->servers->nelts) {
-      continue;
-    }
-
-    rv = apr_memcache_create(pconf, 10, 0, &cfg->mc);
-
+  cfg = (memcache_cfg *)ap_get_module_config(s->module_config, 
+                                             &memcache_module);
+  
+  rv = apr_memcache_create(pconf, 10, 0, &cfg->mc);
+  
+  if(rv != APR_SUCCESS) {
+      ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "no");
+      return rv;
+  }
+  
+  for (hi = apr_hash_first(pconf, cfg->servers); hi; hi = apr_hash_next(hi)) {
+    apr_hash_this(hi, NULL, NULL, &val);
+    rv = apr_memcache_add_server(cfg->mc, (apr_memcache_server_t *)val);
+    
     if(rv != APR_SUCCESS) {
-      ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, sp, "no");
+      ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "no");
       return rv;
     }
 
-    ms = (apr_memcache_server_t *) cfg->servers->elts;
-    for(i = 0; i < cfg->servers->nelts; i++) {
-
-      rv = apr_memcache_add_server(cfg->mc, &ms[i]);
-      if(rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, sp, "no");
-        return rv;
-      }
     }
-  }
-  
+
   return OK;
 }
 
@@ -103,6 +87,7 @@ static const char *memcache_srvr (cmd_parms *cmd, void *doof, int argc,
   apr_status_t rv;
   apr_memcache_server_t *ms;
   char *server = NULL;
+  char *host = NULL;
   char *port = NULL;
   apr_uint32_t min =0 ;
   apr_uint32_t max = 0;
@@ -129,32 +114,36 @@ static const char *memcache_srvr (cmd_parms *cmd, void *doof, int argc,
     }
     else {
       server = apr_pstrdup(cmd->pool, w);
-      port = strchr(server, ':');
+      host = apr_pstrdup(cmd->pool, w);
+      port = strchr(host, ':');
       
       if(port) {
         *(port++) = '\0';
       }
       
-      if(port == NULL || server == NULL) {
+      if(port == NULL || host == NULL) {
         return "Server must be in the format <host>:<port>";
       }
     }
   }
 
-  ms = apr_array_push(cfg->servers);  
+  ms = apr_pcalloc(cmd->pool, sizeof(apr_memcache_server_t));
 
   if(ms == NULL) {
     return "Unable to allocate new memcache server";
   }
 
   rv = 
-    apr_memcache_server_create(cmd->pool, server, atoi(port), 
+    apr_memcache_server_create(cmd->pool, host, atoi(port), 
                                min, smax, max, ttl, &ms);
 
+  ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, cmd->server, 
+               "%s %s %d", server, ms->host, ms->port);
   if(rv != APR_SUCCESS) {
     return "Unable to connect to server";
   }
 
+  apr_hash_set(cfg->servers, server, APR_HASH_KEY_STRING, ms);
   return NULL;
 }
 
@@ -170,8 +159,8 @@ MEMCACHE_DECLARE_NONSTD(apr_memcache_t *) ap_memcache_client(server_rec *s)
   return NULL;
 }
 
-/* client function to return an array of  memcache serverst */
-MEMCACHE_DECLARE_NONSTD(apr_array_header_t *) ap_memcache_serverlist(server_rec *s)
+/* client function to return an array of  memcache servers */
+MEMCACHE_DECLARE_NONSTD(apr_hash_t *) ap_memcache_serverhash(server_rec *s)
 {
   memcache_cfg *cfg = (memcache_cfg *)ap_get_module_config(s->module_config,
                                                            &memcache_module);
@@ -192,7 +181,7 @@ static void memcache_hooks(apr_pool_t *pool)
 {
 
   APR_REGISTER_OPTIONAL_FN(ap_memcache_client);
-  APR_REGISTER_OPTIONAL_FN(ap_memcache_serverlist);
+  APR_REGISTER_OPTIONAL_FN(ap_memcache_serverhash);
 
   ap_hook_post_config(memcache_postconfig, NULL, NULL, APR_HOOK_MIDDLE);
 }

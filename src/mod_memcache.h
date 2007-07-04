@@ -72,10 +72,10 @@
 #include "apr_memcache.h"
 
 MEMCACHE_DECLARE_NONSTD(apr_memcache_t*) ap_memcache_client(server_rec *s);
-MEMCACHE_DECLARE_NONSTD(apr_array_header_t*) ap_memcache_serverlist(server_rec *s);
+MEMCACHE_DECLARE_NONSTD(apr_hash_t*) ap_memcache_serverhash(server_rec *s);
 
 APR_DECLARE_OPTIONAL_FN(apr_memcache_t*, ap_memcache_client, (server_rec *s));
-APR_DECLARE_OPTIONAL_FN(apr_array_header_t*, ap_memcache_serverlist, (server_rec *s));
+APR_DECLARE_OPTIONAL_FN(apr_hash_t*, ap_memcache_serverhash, (server_rec *s));
 
 #endif
 
