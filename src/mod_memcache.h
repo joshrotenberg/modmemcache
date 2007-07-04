@@ -41,18 +41,41 @@
 #define MEMCACHE_DECLARE_DATA             __declspec(dllimport)
 #endif
 
-#include <httpd.h>
-#include <apr_optional.h>
-#include <apr_hash.h>
 
-typedef struct {
-  apr_memcache_t *handle;
-  apr_pool_t *pool;
-} ap_memcache_t;
+
+#include "apr_hooks.h"
+#include "apr.h"
+#include "apr_lib.h"
+#include "apr_strings.h"
+#include "apr_buckets.h"
+#include "apr_md5.h"
+#include "apr_pools.h"
+#include "apr_strings.h"
+#include "apr_optional.h"
+#define APR_WANT_STRFUNC
+#include "apr_want.h"
+
+#include "httpd.h"
+#include "http_config.h"
+#include "ap_config.h"
+#include "http_core.h"
+#include "http_protocol.h"
+#include "http_request.h"
+#include "http_vhost.h"
+#include "http_main.h"
+#include "http_log.h"
+#include "http_connection.h"
+#include "util_filter.h"
+#include "util_md5.h"
+#include "apr_date.h"
+#include "apr_uri.h"
+#include "apr_memcache.h"
 
 MEMCACHE_DECLARE_NONSTD(apr_memcache_t*) ap_memcache_client(server_rec *s);
+MEMCACHE_DECLARE_NONSTD(apr_array_header_t*) ap_memcache_serverlist(server_rec *s);
 
 APR_DECLARE_OPTIONAL_FN(apr_memcache_t*, ap_memcache_client, (server_rec *s));
+APR_DECLARE_OPTIONAL_FN(apr_array_header_t*, ap_memcache_serverlist, (server_rec *s));
 
 #endif
 
