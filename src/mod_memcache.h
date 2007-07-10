@@ -1,9 +1,8 @@
-/* Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+/* Copyright 2007 Josh Rotenberg
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -14,9 +13,9 @@
  * limitations under the License.
  */
 
-/**
- * @file mod_memcache.h
- * @brief Memcached Client Extenstion module for Apache
+/*
+ * 
+ * Memcached Client Extenstion module for Apache
  *
  */
 
@@ -41,16 +40,9 @@
 #define MEMCACHE_DECLARE_DATA             __declspec(dllimport)
 #endif
 
-
-
 #include "apr_hooks.h"
 #include "apr.h"
 #include "apr_lib.h"
-#include "apr_strings.h"
-#include "apr_buckets.h"
-#include "apr_md5.h"
-#include "apr_pools.h"
-#include "apr_strings.h"
 #include "apr_optional.h"
 #define APR_WANT_STRFUNC
 #include "apr_want.h"
@@ -59,16 +51,8 @@
 #include "http_config.h"
 #include "ap_config.h"
 #include "http_core.h"
-#include "http_protocol.h"
-#include "http_request.h"
-#include "http_vhost.h"
 #include "http_main.h"
 #include "http_log.h"
-#include "http_connection.h"
-#include "util_filter.h"
-#include "util_md5.h"
-#include "apr_date.h"
-#include "apr_uri.h"
 #include "apr_memcache.h"
 
 MEMCACHE_DECLARE_NONSTD(apr_memcache_t*) ap_memcache_client(server_rec *s);
@@ -78,5 +62,4 @@ APR_DECLARE_OPTIONAL_FN(apr_memcache_t*, ap_memcache_client, (server_rec *s));
 APR_DECLARE_OPTIONAL_FN(apr_hash_t*, ap_memcache_serverhash, (server_rec *s));
 
 #endif
-
 

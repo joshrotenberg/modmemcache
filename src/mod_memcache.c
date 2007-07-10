@@ -1,9 +1,8 @@
-/* Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+/* Copyright 2007 Josh Rotenberg
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -14,87 +13,113 @@
  * limitations under the License.
  */
 
-#include <ctype.h>
 #include "mod_memcache.h"
 
 module AP_MODULE_DECLARE_DATA memcache_module;
 
-typedef struct memcache_cfg {
+typedef struct memcache_config {
   apr_memcache_t *mc;
   apr_hash_t *servers;
-} memcache_cfg;
+} memcache_config;
 
-/* config create */
-static void *memcache_create_cfg(apr_pool_t *p, server_rec *s)
+static void *memcache_create_config(apr_pool_t *p, server_rec *s)
 {
-  memcache_cfg *cfg = (memcache_cfg *) apr_pcalloc(p, sizeof(memcache_cfg));
+  memcache_config *config = 
+    (memcache_config *) apr_pcalloc(p, sizeof(memcache_config));
 
-  cfg->servers = apr_hash_make(p);
-  return cfg;
+  config->mc = NULL;
+  config->servers = apr_hash_make(p);
+  return config;
 }
 
-/* config merge */
-static void *memcache_merge(apr_pool_t *pool, void *b, void *a)
+static void *memcache_merge_config(apr_pool_t *pool, void *basev, 
+                                   void *overridesv)
 {
-  memcache_cfg *base = (memcache_cfg *) base;
-  memcache_cfg *add = (memcache_cfg *) add;
-  memcache_cfg *cfg = apr_pcalloc(pool, sizeof(memcache_cfg));
+  memcache_config *base = (memcache_config *) basev;
+  memcache_config *overrides = (memcache_config *) overridesv;
+  memcache_config *config = apr_pcalloc(pool, sizeof(memcache_config));
 
-  return (void *) cfg;
+  /*
+   * is there a need to have the ability to run virtual hosts that 
+   * inherit default servers and add their own?
+
+   config->servers = apr_hash_overlay(pool, overrides->servers,
+                                  base->servers);
+  */
+
+  config->mc = overrides->mc;
+  config->servers = overrides->servers;
+
+  return (void *) config;
 }
 
-/* post-config */
-static int memcache_postconfig(apr_pool_t *pconf, apr_pool_t *plog,
+static int memcache_post_config(apr_pool_t *pconf, apr_pool_t *plog,
                                apr_pool_t *ptemp, server_rec *s)
 {
-  memcache_cfg *cfg;
-  apr_status_t rv;
-  apr_memcache_server_t *ms;
-  apr_hash_index_t *hi; 
-  int i;
-  void *val;
+  memcache_config *config;
+  server_rec *sp;
 
-  cfg = (memcache_cfg *)ap_get_module_config(s->module_config, 
-                                             &memcache_module);
+  for(sp = s; sp; sp = sp->next) {
+    apr_status_t rv;
+    apr_hash_index_t *hi; 
+    void *val;
+    apr_memcache_server_t *ms;
+    apr_uint16_t max;
+
+    config = (memcache_config *)ap_get_module_config(sp->module_config, 
+                                               &memcache_module);
+
+    max = apr_hash_count(config->servers);
+      
+    rv = apr_memcache_create(pconf, max, 0, &config->mc);
   
-  rv = apr_memcache_create(pconf, 10, 0, &cfg->mc);
-  
-  if(rv != APR_SUCCESS) {
-      ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "no");
-      return rv;
-  }
-  
-  for (hi = apr_hash_first(pconf, cfg->servers); hi; hi = apr_hash_next(hi)) {
-    apr_hash_this(hi, NULL, NULL, &val);
-    rv = apr_memcache_add_server(cfg->mc, (apr_memcache_server_t *)val);
-    
     if(rv != APR_SUCCESS) {
-      ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "no");
+      ap_log_error(APLOG_MARK, APLOG_ERR, rv, sp, 
+                   "Unable to create memcache object");
       return rv;
     }
+    
+    for (hi = apr_hash_first(pconf, config->servers); 
+         hi; 
+         hi = apr_hash_next(hi)) {
+      
+      apr_hash_this(hi, NULL, NULL, &val);
+      ms = (apr_memcache_server_t *)val;
 
+      rv = apr_memcache_add_server(config->mc, ms);
+
+      if(rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, sp, 
+                     "Unable to add server: %s:%d",
+                     ms->host, ms->port);
+        return rv;
+      }
+      ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, sp, 
+                   "added server: %s:%d to %s:%d",
+                   ms->host, ms->port, sp->server_hostname, sp->port);
     }
+  }
 
   return OK;
 }
 
 /* parse config options */
-static const char *memcache_srvr (cmd_parms *cmd, void *doof, int argc,
+static const char *cmd_mc_server (cmd_parms *cmd, void *doof, int argc,
                                   char *const argv[])
 {
   int i;
   char *w;
   apr_status_t rv;
   apr_memcache_server_t *ms;
-  char *server = NULL;
-  char *host = NULL;
-  char *port = NULL;
   apr_uint32_t min =0 ;
   apr_uint32_t max = 0;
   apr_uint32_t smax = 0;
   apr_uint32_t ttl = 0;
-  memcache_cfg *cfg = 
-    (memcache_cfg *)ap_get_module_config(cmd->server->module_config, 
+  char *server = NULL;
+  char *host = NULL;
+  char *port = NULL;
+  memcache_config *config = 
+    (memcache_config *)ap_get_module_config(cmd->server->module_config, 
                                          &memcache_module);
 
   for(i = 0; i < argc; i++) {
@@ -113,10 +138,11 @@ static const char *memcache_srvr (cmd_parms *cmd, void *doof, int argc,
       smax = atoi(&w[5]);
     }
     else {
-      server = apr_pstrdup(cmd->pool, w);
+      server = apr_pstrdup(cmd->pool, w); /* save this for the hash key */
       host = apr_pstrdup(cmd->pool, w);
+
       port = strchr(host, ':');
-      
+
       if(port) {
         *(port++) = '\0';
       }
@@ -137,42 +163,42 @@ static const char *memcache_srvr (cmd_parms *cmd, void *doof, int argc,
     apr_memcache_server_create(cmd->pool, host, atoi(port), 
                                min, smax, max, ttl, &ms);
 
-  ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, cmd->server, 
-               "%s %s %d", server, ms->host, ms->port);
   if(rv != APR_SUCCESS) {
     return "Unable to connect to server";
   }
 
-  apr_hash_set(cfg->servers, server, APR_HASH_KEY_STRING, ms);
+  apr_hash_set(config->servers, server, APR_HASH_KEY_STRING, ms);
   return NULL;
 }
 
 /* client function to return a memcache object */
 MEMCACHE_DECLARE_NONSTD(apr_memcache_t *) ap_memcache_client(server_rec *s)
 {
-  memcache_cfg *cfg = (memcache_cfg *)ap_get_module_config(s->module_config,
-                                                           &memcache_module);
-  if(cfg->mc != NULL) {
-    return cfg->mc;
+  memcache_config *config = 
+    (memcache_config *)ap_get_module_config(s->module_config,
+                                            &memcache_module);
+  if(config->mc != NULL) {
+    return config->mc;
   }
   
   return NULL;
 }
 
-/* client function to return an array of  memcache servers */
+/* client function to return a hash of memcache servers keyed on host:port */
 MEMCACHE_DECLARE_NONSTD(apr_hash_t *) ap_memcache_serverhash(server_rec *s)
 {
-  memcache_cfg *cfg = (memcache_cfg *)ap_get_module_config(s->module_config,
-                                                           &memcache_module);
-  if(cfg->servers != NULL) {
-    return cfg->servers;
+  memcache_config *config = 
+    (memcache_config *)ap_get_module_config(s->module_config,
+                                            &memcache_module);
+  if(config->servers != NULL) {
+    return config->servers;
   }
   
   return NULL;
 }
 
 static const command_rec memcache_cmds[] = {
-  AP_INIT_TAKE_ARGV("MemcacheServer", memcache_srvr, NULL, RSRC_CONF,
+  AP_INIT_TAKE_ARGV("MemcacheServer", cmd_mc_server, NULL, RSRC_CONF,
                    "memcached host, port, and other options"),
   {NULL}
 };
@@ -183,15 +209,15 @@ static void memcache_hooks(apr_pool_t *pool)
   APR_REGISTER_OPTIONAL_FN(ap_memcache_client);
   APR_REGISTER_OPTIONAL_FN(ap_memcache_serverhash);
 
-  ap_hook_post_config(memcache_postconfig, NULL, NULL, APR_HOOK_MIDDLE);
+  ap_hook_post_config(memcache_post_config, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 module AP_MODULE_DECLARE_DATA memcache_module = {
   STANDARD20_MODULE_STUFF,
   NULL,
   NULL,
-  memcache_create_cfg,
-  memcache_merge,
+  memcache_create_config,
+  memcache_merge_config,
   memcache_cmds,
   memcache_hooks
 };

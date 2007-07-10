@@ -1,5 +1,85 @@
 mod_memcache 
--_-_-_-_-_-_-
 
-Parse memcached config in httpd.conf and export a function to access a
-prepopulated apr_memcache_t object.
+--------------
+
+Audience:
+
+mod_memcache may be interesting to you if you are:
+1) developing Apache modules, and
+2) want to connect to one or more memcached server instances from those 
+   modules, and
+3) are using apr_memcache to do so, and
+4) would like to use the same apr_memcache_t handle for those connections, and
+5) don't feel like writing and rewriting/cutting/pasting the Apache
+   conf code to deal with it.
+
+Note that 'mod_memcache' is a pretty vague and improper name for this
+module, but thats what I'm calling it for now. That may change in
+the future because a) its too close to mod_mem_cache, which is
+completely different in purpose, and b) it doesn't reflect
+specifically enough the purpose of this module. So yeah.
+
+Note that this module is really only of interest to module developers
+as it provides nothing more than a convenient way to deal with an
+apr_memcache_t.
+
+--------------
+
+Installation:
+
+# install mod_memcache as a DSO into your Apache 2 directory
+% ./configure --with-apxs=/path/to/apxs \
+              --with-apr-memcache=/path/to/apr/memcache
+% make
+% make install
+
+--------------
+
+Configuration:
+
+# in your httpd.conf ...
+
+# load the shared object
+LoadModule memcache_module modules/mod_memcache.so
+# configure one or more memcached servers to use
+MemcacheServer 10.0.1.1:11211 min=2 smax=4 max=5 ttl=60
+MemcacheServer 10.0.1.1:11212 min=2 smax=4 max=5 ttl=60
+
+--------------
+
+Usage:
+
+/* in mod_yourmodule.c */
+
+#include "mod_memcache.h"
+
+/* .. in some handler .. */
+
+apr_memcache_t *mc;
+apr_status_t rv;
+
+mc = ap_memcache_client(r->server);
+rv = apr_memcache_set(mc, "cow", "moo", sizeof("cow") - 1, 0, 0);
+
+/* ... etc., and/or ... */
+
+apr_memcache_t *mc;
+apr_status_t rv;
+apr_hash_t *servers;
+apr_hash_index_t *hi;
+
+servers = ap_memcace_serverhash(r->server);
+rv = apr_memcache_create(r->pool, 10, 0, &mc);
+    
+for (hi = apr_hash_first(pconf, servers); 
+     hi; 
+     hi = apr_hash_next(hi)) {
+      
+    apr_hash_this(hi, NULL, NULL, &val);
+    ms = (apr_memcache_server_t *)val;
+
+   rv = apr_memcache_add_server(mc, ms);
+}
+
+
+
