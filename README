@@ -28,6 +28,7 @@ apr_memcache_t.
 Installation:
 
 # install mod_memcache as a DSO into your Apache 2 directory
+% ./autogen.sh
 % ./configure --with-apxs=/path/to/apxs \
               --with-apr-memcache=/path/to/apr/memcache
 % make
