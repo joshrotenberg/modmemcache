@@ -1,5 +1,4 @@
 mod_memcache 
-
 --------------
 
 Audience:
@@ -28,7 +27,11 @@ apr_memcache_t.
 Installation:
 
 # install mod_memcache as a DSO into your Apache 2 directory
-% ./autogen.sh
+
+# if you grabbed the source from svn ...
+% ./autogen.sh 
+
+# then 
 % ./configure --with-apxs=/path/to/apxs \
               --with-apr-memcache=/path/to/apr/memcache
 % make
